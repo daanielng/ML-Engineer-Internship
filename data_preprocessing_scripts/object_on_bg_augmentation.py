@@ -5,9 +5,10 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import random
+import imutils
 import shutil
 from tqdm import tqdm
-from PIL import Image, ImageOps, ImageEnhance
+from PIL import Image, ImageOps, ImageEnhance, ImageFilter
 
 
 ###############
@@ -15,14 +16,26 @@ from PIL import Image, ImageOps, ImageEnhance
 ###############
 
 obj_folder_path = r'D:\Daniel\PMD\YOLOv4_negatives\stroller data\stroller_pngs' # folder of object images dir
-bg_images_path = r"D:\Daniel\PMD\YOLOv4_negatives\stroller data\background_images" # folder of background images dir
-save_path = r"D:\Daniel\PMD\YOLOv4_negatives\stroller data\new_stroller_frames_2" # folder to save augmented backgrounds
+bg_images_path = r"D:\Daniel\PMD\YOLOv4_negatives\stroller data\TAV_backgrounds" # folder of background images dir
+save_path = r"D:\Daniel\PMD\YOLOv4_negatives\stroller data\TAV_augmented_frames" # folder to save augmented backgrounds
+
+
+##########
+# Inputs #
+##########
+
+num_of_frames = 10 # number of frames to augment
+num_of_objects = 2 # number of objects in each frame
+yolo_txt = False # True if creating YOLO text file 
+classid = None # enter class ID for YOLO text file, else 'no_class_id_given' if creating YOLO text file
 
 
 
 ###############################################
 # Create all helper functions for augmentation #
 ################################################
+#NOTE: only objects with white backgrounds will work for this augmentation script
+
 '''
 TEL-AVIV:
     Side View CCTV:
@@ -35,15 +48,27 @@ TEL-AVIV:
 
 '''
 #ensures image format is PNG when running opencv operations
-def png_format(img_path, pixel_threshold):
-    filename = img_path.split('\\')[-1]
+def png_format(img, pixel_threshold):
+    # img variable can be a path or Image object
 
-    if '.png' in filename:
-        img = cv2.imread(img_path, -1)  #imread_unchanged: read image and include alpha channel
-        return img
+    if type(img) is str: #if image path
+        filename = img.split('\\')[-1]
+        if 'png' in filename: #if image is PNG
+            img = cv2.imread(img, -1)  #imread_unchanged: read image and include alpha channel
+            return img
+
+        else:
+            jpg_or = cv2.imread(img)
 
 
-    jpg_or = cv2.imread(img_path)
+    else: # if image object (PIL format)
+        img_array = np.array(img)
+
+        if img_array.shape[2] == 4: # if image object is PNG
+            return img_array
+        
+        else: #image object is RGB: 3 channels
+            jpg_or = img_array
     
     z = np.ones(jpg_or.shape[:-1] + (1,), dtype=jpg_or.dtype)
     z = z*255
@@ -133,21 +158,31 @@ def desired_size(x,y, nearest_obj, furthest_obj, frame_width, frame_height, TAV_
 def random_augment(image):
     yes_or_no = ['Yes', 'No']
 
+    # flip horizontally
     if random.choice(yes_or_no) == 'Yes':
-        image = ImageOps.mirror(image) #flip horizontally
+        image = ImageOps.mirror(image) 
 
+    # adjust brightness
     if random.choice(yes_or_no) == 'Yes':
-        brightness_factor = random.uniform(0.5,1.5)
-        image = ImageEnhance.Brightness(image).enhance(brightness_factor) #adjust brightness
+        brightness_factor = random.uniform(0.5,1.5) 
+        image = ImageEnhance.Brightness(image).enhance(brightness_factor) 
 
+    # rotate image counter-clockwise
     if random.choice(yes_or_no) == 'Yes':
-        angle = random.randint(1, 30) #rotate image counter-clockwise
-        image = image.rotate(angle)
+        angle = random.randint(1, 20) 
+        if np.array(image).shape[2] == 3: #if image is JPEG, i.e 3 channels
+            image = image.rotate(angle, Image.NEAREST, fillcolor='white')
+        elif np.array(image).shape[2] == 4: #if image is PNG, i.e 4 channels
+            image = image.rotate(angle, Image.NEAREST, expand=1)
 
+    # adjust contrast
     if random.choice(yes_or_no) == 'Yes':
-        contrast_factor = random.uniform(0.5, 1.5) #adjust contrast
+        contrast_factor = random.uniform(0.5, 1.5) 
         image = ImageEnhance.Contrast(image).enhance(contrast_factor)
 
+    # add box blurring, radius size = 1
+    if random.choice(yes_or_no) == 'Yes':
+        image = image.filter(ImageFilter.BoxBlur(1)) 
     
 
     return image
@@ -278,12 +313,12 @@ def get_yolo_information(obj_mask, random_x_coord, random_y_coord, frame_width, 
 
 
 # returns object mask and inverted mask
-def obj_mask_and_inverted_mask(obj_path, resized_img):
+def obj_mask_and_inverted_mask(resized_img):
     # dimesions of resized object given random coords
     width, height = resized_img.size
 
     # read image using opencv to perform bitwise operations
-    object = png_format(obj_path, 200)
+    object = png_format(resized_img, 200)
     object = cv2.resize(object, (height, width))
 
     # create object mask and inverted mask
@@ -296,12 +331,12 @@ def obj_mask_and_inverted_mask(obj_path, resized_img):
 
 
 # returns object background and foreground images given object mask and inverted mask
-def object_foreground_and_background(obj_mask, obj_mask_inverted, roi, obj_path, resized_object_img):
+def object_foreground_and_background(obj_mask, obj_mask_inverted, roi, resized_object_img):
     # dimesions of resized object given random coords
     width, height = resized_object_img.size
 
     # read image and convert to RGB
-    object = png_format(obj_path, 200)
+    object = png_format(resized_object_img, 200)
     object = cv2.resize(object, (height, width))
     object = cv2.cvtColor(object, cv2.COLOR_BGR2RGB)
     
@@ -327,17 +362,18 @@ def img_with_mask(obj_path, desired_obj_size, bg_img, random_x_coord, random_y_c
     bg_roi = bg_roi_img(resized_object_img, bg_img, random_x_coord, random_y_coord)
     
     # get object mask and inverted mask
-    obj_mask, obj_mask_inverted = obj_mask_and_inverted_mask(obj_path, resized_object_img)
-    
+    obj_mask, obj_mask_inverted = obj_mask_and_inverted_mask(resized_object_img)
+     
     # get YOLO information
     yolo_info = get_yolo_information(obj_mask, random_x_coord, random_y_coord, frame_width, frame_height)
 
     # get object background and foreground images
-    obj_bg, obj_fg = object_foreground_and_background(obj_mask, obj_mask_inverted, bg_roi, obj_path, resized_object_img)
+    obj_bg, obj_fg = object_foreground_and_background(obj_mask, obj_mask_inverted, bg_roi, resized_object_img)
 
     # combine obj bg and fg images together
     img_with_mask = cv2.add(obj_bg, obj_fg)
     img_with_mask = Image.fromarray(np.uint8(img_with_mask))
+    img_with_mask = img_with_mask.resize(resized_object_img.size) #opencv height/width to PIL height/width
 
     return (img_with_mask, yolo_info)
 
@@ -425,10 +461,10 @@ def augmented_bg_with_objects(bg_path, num_of_objects, object_folder_path, YOLO_
         YOLO_lst.append(yolo_info)
     
     #convert to RGB format
-    try:
-        bg_img = format_rgb(bg_img)
-    except:
-        pass
+    # try:
+    #     bg_img = format_rgb(bg_img)
+    # except:
+    #     pass
     
     return bg_img, YOLO_lst
     
@@ -474,7 +510,8 @@ def generate_augmented_backgrounds(num_of_augmented_frames, num_of_objects, obj_
         except Exception as e:
             print(e)
             pass
-            
+
+
 
 
 
@@ -485,7 +522,9 @@ def generate_augmented_backgrounds(num_of_augmented_frames, num_of_objects, obj_
 # 2nd input: number of objects in each frame
 
 # WITH YOLO TXT FILES
-# generate_augmented_backgrounds(5, 4, obj_folder_path, bg_images_path, save_path, YOLO_txt= True, YOLO_CLASSID=0)
+if yolo_txt:
+    generate_augmented_backgrounds(num_of_frames, num_of_objects, obj_folder_path, bg_images_path, save_path, YOLO_txt= yolo_txt, YOLO_CLASSID=classid)
 
 # WITHOUT YOLO TXT FILES
-generate_augmented_backgrounds(5, 4, obj_folder_path, bg_images_path, save_path)
+generate_augmented_backgrounds(num_of_frames, num_of_objects, obj_folder_path, bg_images_path, save_path)
+
