@@ -79,8 +79,8 @@ def initialize_sizes_and_coordinates(TAV_cam_view=None):
         boundary_x, boundary_y = 0, 400
 
     elif 'cam2' in TAV_cam_view:
-        nearest_obj = np.array([80 , 95]) #leftside
-        furthest_obj = np.array([70, 50]) #rightside
+        nearest_obj = np.array([120 , 135]) #leftside
+        furthest_obj = np.array([80 , 95]) #rightside
 
         boundary_x, boundary_y = 0, 600
 
@@ -102,9 +102,9 @@ def random_coords(frame_width, frame_height, boundary_x, boundary_y, TAV_cam_vie
     if not TAV_cam_view:
         x, y = random.randint(0, frame_width), random.randint(0, frame_height)
     elif 'cam1' in TAV_cam_view:
-        x, y = random.randint(0, 1630), random.randint(boundary_y, 800)
-    elif 'cam2' in TAV_cam_view:
         x, y = random.randint(0, frame_width), random.randint(boundary_y, 800)
+    elif 'cam2' in TAV_cam_view:
+        x, y = random.randint(0, 1600), random.randint(boundary_y, 800)
     
     elif 'cam3' in TAV_cam_view:
         x, y = random.randint(boundary_x, frame_width), random.randint(0, boundary_y)
@@ -116,7 +116,7 @@ def random_coords(frame_width, frame_height, boundary_x, boundary_y, TAV_cam_vie
 
 
 # returns desired size of object given random coords
-def desired_size(x,y, nearest_obj, furthest_obj, frame_height, frame_width, TAV_cam_view=None):
+def desired_size(x,y, nearest_obj, furthest_obj, frame_width, frame_height, TAV_cam_view=None):
     if not TAV_cam_view:
         size = ((y/frame_height) * (nearest_obj- furthest_obj)) + furthest_obj
         size = tuple(map(int,size))
@@ -127,7 +127,6 @@ def desired_size(x,y, nearest_obj, furthest_obj, frame_height, frame_width, TAV_
         size = ((y/frame_height) * (nearest_obj- furthest_obj)) + furthest_obj
         size = tuple(map(int,size))
     return size
-
 
 
 # returns randomly augmented object image
@@ -191,25 +190,8 @@ def image_resize(img, desired_size, TAV_cam_view=None):
 
 
 
-# returns YOLO information
-def get_yolo_information(obj_x_start, obj_y_start, obj_x_end, obj_y_end, obj_width, obj_height, frame_width, frame_height):
-    center_x = (obj_x_start + obj_x_end)/2
-    center_y = (obj_y_start + obj_y_end)/2
-
-    normalized_center_x = center_x/frame_width
-    normalized_center_y = center_y/frame_height
-
-    normalized_obj_width = obj_width/frame_width
-    normalized_obj_height = obj_height/frame_height
-
-    return [normalized_center_x, normalized_center_y, normalized_obj_width, normalized_obj_height]
-
-
-
 # returns roi of background given object and random coords
 def bg_roi_img(resized_obj_img, bg_img, random_x_coord, random_y_coord):
-    # get frame width and height
-    frame_width, frame_height = bg_img.size
 
     # convert PIL format to array for opencv operations
     bg = np.array(bg_img)
@@ -223,17 +205,76 @@ def bg_roi_img(resized_obj_img, bg_img, random_x_coord, random_y_coord):
     desired_x_end = desired_x_start + width
     desired_y_end = desired_y_start + height
     
-    # YOLO information
-    yolo_info = get_yolo_information(desired_x_start, desired_y_start, desired_x_end, desired_y_end, width, height, frame_width, frame_height)
-    
     # crop background image based on ROI coordinates
     roi = bg[desired_y_start:desired_y_end, desired_x_start:desired_x_end]
-    
-    #change width,height to height, width
+   
+    #change width, height to height, width
     roi = cv2.resize(roi, (height, width))
 
-    return (roi, yolo_info) #opencv format
+    return roi #opencv format
 
+
+
+# returns contour of object in image
+def object_contour(obj_mask):
+    # find all contours from object mask
+    contours = cv2.findContours(obj_mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = imutils.grab_contours(contours)
+
+    # get largest contour: assuming it is the object
+    contour = max(contours, key = cv2.contourArea)
+    return contour
+
+
+
+# returns width, height, top left and bottom right coordinates of object contour's bounding box
+def bbox_coord(contour, random_x_coord, random_y_coord):
+    c = contour
+
+    extreme_Left = tuple(c[c[:, :, 0].argmin()][0])
+    extreme_Right = tuple(c[c[:, :, 0].argmax()][0])
+    extreme_Top = tuple(c[c[:, :, 1].argmin()][0])
+    extreme_Bottom = tuple(c[c[:, :, 1].argmax()][0])
+
+    # coordinates wrt to contour
+    x_start = extreme_Left[0]
+    y_start = extreme_Top[1]
+    x_end = extreme_Right[0]
+    y_end = extreme_Bottom[1]
+
+    # width and height of bounding box
+    bbox_width = x_end - x_start
+    bbox_height = y_end - y_start
+
+    #coordinates of bbox wrt to background image
+    x_start = random_x_coord + x_start
+    y_start = random_y_coord + y_start
+    x_end = x_start + bbox_width
+    y_end = y_start + bbox_height
+
+    return(x_start, y_start, x_end, y_end, bbox_width, bbox_height)
+
+
+# returns YOLO information
+def get_yolo_information(obj_mask, random_x_coord, random_y_coord, frame_width, frame_height):
+    # get contour of object
+    contour = object_contour(obj_mask)
+
+    # get dimensions and coordinates of object
+    obj_x_start, obj_y_start, obj_x_end, obj_y_end, obj_width, obj_height = bbox_coord(contour, random_x_coord, random_y_coord)
+    
+    # center points of object
+    center_x = (obj_x_start + obj_x_end)/2
+    center_y = (obj_y_start + obj_y_end)/2
+
+    # normalize coordinates
+    normalized_center_x = center_x/frame_width
+    normalized_center_y = center_y/frame_height
+
+    normalized_obj_width = obj_width/frame_width
+    normalized_obj_height = obj_height/frame_height
+
+    return [normalized_center_x, normalized_center_y, normalized_obj_width, normalized_obj_height]
 
 
 # returns object mask and inverted mask
@@ -248,6 +289,7 @@ def obj_mask_and_inverted_mask(obj_path, resized_img):
     # create object mask and inverted mask
     obj_mask = object[:,:,3]
     obj_mask_inverted = cv2.bitwise_not(obj_mask) #returns one’s complement of the number
+
 
     return (obj_mask, obj_mask_inverted) #opencv format
 
@@ -270,8 +312,9 @@ def object_foreground_and_background(obj_mask, obj_mask_inverted, roi, obj_path,
     return(bg, fg) #opencv format
 
 
+
 # returns object img with selected background
-def img_with_mask(obj_path, desired_obj_size, bg_img, random_x_coord, random_y_coord, TAV_cam_view = None):
+def img_with_mask(obj_path, desired_obj_size, bg_img, random_x_coord, random_y_coord, frame_width, frame_height, TAV_cam_view = None):
     
     # resize object image based on desired size
     object_img = Image.open(obj_path)
@@ -281,11 +324,14 @@ def img_with_mask(obj_path, desired_obj_size, bg_img, random_x_coord, random_y_c
     resized_object_img = random_augment(resized_object_img)
     
     # get ROI of background image
-    bg_roi, yolo_info = bg_roi_img(resized_object_img, bg_img, random_x_coord, random_y_coord)
+    bg_roi = bg_roi_img(resized_object_img, bg_img, random_x_coord, random_y_coord)
     
     # get object mask and inverted mask
     obj_mask, obj_mask_inverted = obj_mask_and_inverted_mask(obj_path, resized_object_img)
     
+    # get YOLO information
+    yolo_info = get_yolo_information(obj_mask, random_x_coord, random_y_coord, frame_width, frame_height)
+
     # get object background and foreground images
     obj_bg, obj_fg = object_foreground_and_background(obj_mask, obj_mask_inverted, bg_roi, obj_path, resized_object_img)
 
@@ -366,10 +412,10 @@ def augmented_bg_with_objects(bg_path, num_of_objects, object_folder_path, YOLO_
         random_coordinates = (random_x_coord, random_y_coord)
 
         # desired size of object given random coords
-        size = desired_size(random_x_coord, random_y_coord, nearest_obj, furthest_obj, frame_height, frame_width, TAV_cam_view)
+        size = desired_size(random_x_coord, random_y_coord, nearest_obj, furthest_obj, frame_width, frame_height, TAV_cam_view)
 
         # obtain image with mask
-        img_mask, yolo_info = img_with_mask(obj_path, size, bg_img, random_x_coord, random_y_coord, TAV_cam_view)
+        img_mask, yolo_info = img_with_mask(obj_path, size, bg_img, random_x_coord, random_y_coord, frame_width, frame_height, TAV_cam_view)
         
         # overlay object on background
         bg_img = overlay_img_on_bg(img_mask, bg_img, random_coordinates)
@@ -398,7 +444,6 @@ def generate_augmented_backgrounds(num_of_augmented_frames, num_of_objects, obj_
     # YOLO_txt: True if generating yolo text files, else False
     # YOLO_CLASSID: specify CLASSID
     
-
     # randomize the number of objects
     if num_of_objects >= 10:
         num_of_objects = random.randint(10,15)
@@ -418,7 +463,8 @@ def generate_augmented_backgrounds(num_of_augmented_frames, num_of_objects, obj_
         # complete path to save background image
         save_bg_name = save_path + '\\' + f'{bg_name}_{i}'
 
-        try:
+        #NOTE: there are occasions where random coordinates generated contain a 0, thus we avoid an error by implementing Try/Except
+        try: 
             # get augmented background and YOLO list
             bg_img, YOLO_lst = augmented_bg_with_objects(bg_path, num_of_objects, obj_folder_path, YOLO_CLASSID)
 
@@ -428,6 +474,7 @@ def generate_augmented_backgrounds(num_of_augmented_frames, num_of_objects, obj_
         except Exception as e:
             print(e)
             pass
+            
 
 
 
