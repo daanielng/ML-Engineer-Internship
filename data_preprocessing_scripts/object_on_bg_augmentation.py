@@ -526,5 +526,6 @@ if yolo_txt:
     generate_augmented_backgrounds(num_of_frames, num_of_objects, obj_folder_path, bg_images_path, save_path, YOLO_txt= yolo_txt, YOLO_CLASSID=classid)
 
 # WITHOUT YOLO TXT FILES
-generate_augmented_backgrounds(num_of_frames, num_of_objects, obj_folder_path, bg_images_path, save_path)
+else:
+    generate_augmented_backgrounds(num_of_frames, num_of_objects, obj_folder_path, bg_images_path, save_path)
 
