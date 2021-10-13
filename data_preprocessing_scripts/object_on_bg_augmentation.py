@@ -285,6 +285,8 @@ def bbox_coord(contour, random_x_coord, random_y_coord):
 # returns YOLO information
 def get_yolo_information(obj_mask, random_x_coord, random_y_coord, frame_width, frame_height):
     # get contour of object
+    height, width = obj_mask.shape[:2]
+    obj_mask = cv2.resize(obj_mask, (height, width)) #resize mask to get correct bbox size
     contour = object_contour(obj_mask)
 
     # get dimensions and coordinates of object
