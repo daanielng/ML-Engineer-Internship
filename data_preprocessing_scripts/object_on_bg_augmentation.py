@@ -34,8 +34,6 @@ classid = None # enter class ID for YOLO text file, else 'no_class_id_given' if 
 ###############################################
 # Create all helper functions for augmentation #
 ################################################
-#NOTE: only objects with white backgrounds will work for this augmentation script
-
 '''
 TEL-AVIV:
     Side View CCTV:
@@ -49,7 +47,6 @@ TEL-AVIV:
 '''
 #ensures image format is PNG when running opencv operations
 def png_format(img, pixel_threshold):
-    # img variable can be a path or Image object
 
     if type(img) is str: #if image path
         filename = img.split('\\')[-1]
@@ -158,31 +155,26 @@ def desired_size(x,y, nearest_obj, furthest_obj, frame_width, frame_height, TAV_
 def random_augment(image):
     yes_or_no = ['Yes', 'No']
 
-    # flip horizontally
     if random.choice(yes_or_no) == 'Yes':
-        image = ImageOps.mirror(image) 
+        image = ImageOps.mirror(image) #flip horizontally
 
-    # adjust brightness
     if random.choice(yes_or_no) == 'Yes':
-        brightness_factor = random.uniform(0.5,1.5) 
+        brightness_factor = random.uniform(0.5,1.5) #adjust brightness
         image = ImageEnhance.Brightness(image).enhance(brightness_factor) 
 
-    # rotate image counter-clockwise
     if random.choice(yes_or_no) == 'Yes':
-        angle = random.randint(1, 20) 
+        angle = random.randint(1, 20) #rotate image counter-clockwise
         if np.array(image).shape[2] == 3: #if image is JPEG, i.e 3 channels
             image = image.rotate(angle, Image.NEAREST, fillcolor='white')
         elif np.array(image).shape[2] == 4: #if image is PNG, i.e 4 channels
             image = image.rotate(angle, Image.NEAREST, expand=1)
 
-    # adjust contrast
     if random.choice(yes_or_no) == 'Yes':
-        contrast_factor = random.uniform(0.5, 1.5) 
+        contrast_factor = random.uniform(0.5, 1.5) #adjust contrast
         image = ImageEnhance.Contrast(image).enhance(contrast_factor)
 
-    # add box blurring, radius size = 1
     if random.choice(yes_or_no) == 'Yes':
-        image = image.filter(ImageFilter.BoxBlur(1)) 
+        image = image.filter(ImageFilter.BoxBlur(1)) #add box blurring, radius size = 1
     
 
     return image
@@ -335,14 +327,17 @@ def object_foreground_and_background(obj_mask, obj_mask_inverted, roi, resized_o
     # dimesions of resized object given random coords
     width, height = resized_object_img.size
 
-    # read image and convert to RGB
+    # read image and convert to BGR for opencv operations
     object = png_format(resized_object_img, 200)
     object = cv2.resize(object, (height, width))
-    object = cv2.cvtColor(object, cv2.COLOR_BGR2RGB)
+    object = cv2.cvtColor(object, cv2.COLOR_RGB2BGR)
     
     # get bg and fg images
     bg = cv2.bitwise_and(roi, roi, mask = obj_mask_inverted)
     fg = cv2.bitwise_and(object, object, mask = obj_mask)
+
+    # convert foreground to RGB
+    fg = cv2.cvtColor(fg, cv2.COLOR_BGR2RGB)
 
     return(bg, fg) #opencv format
 
@@ -423,6 +418,9 @@ def augmented_bg_with_objects(bg_path, num_of_objects, object_folder_path, YOLO_
     lst_object_paths = os.listdir(object_folder_path)
 
     # randomly sample object images in the list
+    if num_of_objects>len(lst_object_paths):
+        num_of_objects = 1
+        print('Number of objects exceeded available quantity, defaulting to 1 object')
     sampled_object_paths = random.sample(lst_object_paths, num_of_objects)
 
     # get filename of background
@@ -510,6 +508,7 @@ def generate_augmented_backgrounds(num_of_augmented_frames, num_of_objects, obj_
         except Exception as e:
             print(e)
             pass
+            
 
 
 
@@ -528,4 +527,6 @@ if yolo_txt:
 # WITHOUT YOLO TXT FILES
 else:
     generate_augmented_backgrounds(num_of_frames, num_of_objects, obj_folder_path, bg_images_path, save_path)
+
+
 
