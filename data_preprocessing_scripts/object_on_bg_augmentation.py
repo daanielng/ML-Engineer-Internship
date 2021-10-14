@@ -87,10 +87,19 @@ def png_format(img, pixel_threshold):
 
 
 # initialize smallest and largest object sizes and boundary coordinates given a background image
-def initialize_sizes_and_coordinates(TAV_cam_view=None):
+def initialize_sizes_and_coordinates(bg_path, TAV_cam_view=None):
+    #NOTE: objects are scaled according to Tel-Aviv frame dimension: 1920 x 1080 (height, width)
+    #      Thus, any other dimensions will be scaled to TAV frame dimension
+
+    #NOTE: np.array([width, height])
     if not TAV_cam_view: #i.e generic bg images
-        nearest_obj = np.array([150 , 210]) #closest to cam
-        furthest_obj = np.array([50, 80]) #furthest to cam     
+        # get width and height of background image
+        bg_width, bg_height = Image.open(bg_path).size
+
+        # get ratios of width and height
+        width_ratio, height_ratio = (bg_width/1080), (bg_height/1920)
+        nearest_obj = np.array([150*width_ratio , 210*height_ratio]) #closest to cam
+        furthest_obj = np.array([50*width_ratio, 80*height_ratio]) #furthest to cam     
 
         boundary_x, boundary_y = 0, 0
     
@@ -137,8 +146,50 @@ def random_coords(frame_width, frame_height, boundary_x, boundary_y, TAV_cam_vie
 
 
 
+
+# condition for overlapping object with other objects
+def overlap_coords(non_overlap_size_lst, threshold = 1):
+    #NOTE: threshold value determines how much overlapping is allowed (1: 0% overlap allowed, 0: 100% overlap allowed)
+
+    if len(non_overlap_size_lst) == 1:
+        return False
+
+    else:
+        # get current size and coordinates
+        current_size, current_coords = non_overlap_size_lst[-1]
+
+        # desired width and desired height of current size
+        current_width, current_height = current_size
+
+        # get current coordinates
+        current_x, current_y = current_coords #current random coordinates
+
+        # get width and height thresholds
+        width_threshold, height_threshold = current_width*threshold, current_height*threshold
+
+        # check that current size satisfy overlapping condition
+        for indx in range(len(non_overlap_size_lst)-1):
+            # get past coordinates
+            past_coords = non_overlap_size_lst[indx][1]
+            past_x, past_y = past_coords
+
+            # get difference in width and height
+            width_diff, height_diff = abs(current_x - past_x), abs(current_y - past_y)
+
+            #if difference is smaller than threshold: too much overlapping
+            if width_diff < width_threshold or height_diff < height_threshold:
+                non_overlap_size_lst.pop(-1) #remove current coordinates
+                return True
+        
+        return False
+
+
+
+
 # returns desired size of object given random coords
-def desired_size(x,y, nearest_obj, furthest_obj, frame_width, frame_height, TAV_cam_view=None):
+def desired_size(random_coords, nearest_obj, furthest_obj, frame_width, frame_height, TAV_cam_view=None):
+    # get x-y coordinates
+    x,y = random_coords
     if not TAV_cam_view:
         size = ((y/frame_height) * (nearest_obj- furthest_obj)) + furthest_obj
         size = tuple(map(int,size))
@@ -149,6 +200,43 @@ def desired_size(x,y, nearest_obj, furthest_obj, frame_width, frame_height, TAV_
         size = ((y/frame_height) * (nearest_obj- furthest_obj)) + furthest_obj
         size = tuple(map(int,size))
     return size
+
+
+
+# returns random coordinates and desired size of object given those coordinates
+def get_random_coords_and_size(obj_path, non_overlap_size_lst, frame_width, frame_height, nearest_obj, furthest_obj, boundary_x, boundary_y, TAV_cam_view=None):
+    # get image in PIL format
+    img = Image.open(obj_path)
+
+    # initialize random coordinates
+    random_coordinates = random_coords(frame_width, frame_height, boundary_x, boundary_y, TAV_cam_view)
+    
+    # initialize desired size given random coordinates
+    size = desired_size(random_coordinates, nearest_obj, furthest_obj, frame_width, frame_height, TAV_cam_view)
+    
+    # resize image based on desired size
+    img = image_resize(img, size, TAV_cam_view)
+    size = img.size
+
+    # keep track of non-overlapping objects
+    non_overlap_size_lst.append((size, random_coordinates))
+
+    # condition to ensure objects do not overlap too much
+    while overlap_coords(non_overlap_size_lst):
+        # re-initialize coordinates
+        random_coordinates = random_coords(frame_width, frame_height, boundary_x, boundary_y, TAV_cam_view)
+        
+        #re-initialize desired size
+        size = desired_size(random_coordinates, nearest_obj, furthest_obj, frame_width, frame_height, TAV_cam_view)
+
+        # resize image based on re-initialized desired size
+        img = image_resize(img, size, TAV_cam_view)
+        size = img.size
+
+        non_overlap_size_lst.append((size, random_coordinates))
+
+    return random_coordinates, size, non_overlap_size_lst
+
 
 
 # returns randomly augmented object image
@@ -346,8 +434,10 @@ def object_foreground_and_background(obj_mask, obj_mask_inverted, roi, resized_o
 
 
 # returns object img with selected background
-def img_with_mask(obj_path, desired_obj_size, bg_img, random_x_coord, random_y_coord, frame_width, frame_height, TAV_cam_view = None):
-    
+def img_with_mask(obj_path, desired_obj_size, bg_img, random_coordinates, frame_width, frame_height, TAV_cam_view = None):
+    # get x-y coordinates
+    random_x_coord, random_y_coord = random_coordinates
+
     # resize object image based on desired size
     object_img = Image.open(obj_path)
     resized_object_img = image_resize(object_img, desired_obj_size, TAV_cam_view)
@@ -406,24 +496,85 @@ def create_yolo_txt_file(yolo_lst, save_bg_file_name, YOLO_txt = False):
     
 
 
+# returns a list of sampled paths
+def sample_objects(sub_obj_folder_path, num_of_objects):
+    # load object list
+    lst = os.listdir(sub_obj_folder_path)
+
+    if num_of_objects>len(lst):
+        num_of_objects = random.randint(1,len(lst))
+    else:
+        # randomize the number of objects
+        min_num = num_of_objects
+        max_num = num_of_objects + 4
+        num_of_objects = random.randint(min_num, max_num)
+
+        if num_of_objects>len(lst):
+            num_of_objects = min_num
+
+    # randomly sample object paths
+    sampled_object_paths = random.sample(lst, num_of_objects)
+    
+    # get list of full-path objects
+    for indx in range(len(sampled_object_paths)):
+        path = sampled_object_paths[indx]
+        fullpath = sub_obj_folder_path + '\\' + path
+        sampled_object_paths[indx] = fullpath
+
+    return sampled_object_paths
+
+
+
+# get list of sampled object paths 
+def get_object_paths(main_object_folder_path, num_of_objects):
+    lst_object_paths = []
+    lst_names = []
+
+    # if path is list: list of different object folder paths
+    if type(main_object_folder_path) is list:
+
+        # iterate through each object folder path
+        for obj_folder in main_object_folder_path:
+
+            foldername = obj_folder.split('\\')[-1]
+
+            # sample each sub folder
+            sampled_object_paths = sample_objects(obj_folder, num_of_objects)
+
+            lst_object_paths.extend(sampled_object_paths)
+            lst_names.append(foldername)
+
+        # sample all object paths: to get a variety of different objects
+        main_sampled_object_paths = random.sample(lst_object_paths, num_of_objects)
+
+        # sort object name types in alpha-numeric order
+        lst_names.sort()
+        return (main_sampled_object_paths, lst_names)
+
+    # if path is string: 1 object folder path
+    elif type(main_object_folder_path) is str:
+        foldername = main_object_folder_path.split('\\')[-1]
+    
+        # sample object folder
+        sampled_object_paths = sample_objects(main_object_folder_path, num_of_objects)
+
+        lst_object_paths.extend(sampled_object_paths)
+        lst_names.append(foldername)
+        return (lst_object_paths, lst_names)
+    else:
+        print('invalid object path!')
+    
+
+
+
 # returns augmented background image with specified number of objects 
-def augmented_bg_with_objects(bg_path, num_of_objects, object_folder_path, YOLO_CLASSID = None):
+def augmented_bg_with_objects(bg_path, num_of_objects, object_folder_path):
     
     # create YOLO list for YOLO text file
     YOLO_lst = []
-    if YOLO_CLASSID is not None:
-        CLASSID = YOLO_CLASSID
-    else:
-        CLASSID = 'no_class_id_given'
-    
-    # get list of object image paths
-    lst_object_paths = os.listdir(object_folder_path)
 
-    # randomly sample object images in the list
-    if num_of_objects>len(lst_object_paths):
-        num_of_objects = 1
-        print('Number of objects exceeded available quantity, defaulting to 1 object')
-    sampled_object_paths = random.sample(lst_object_paths, num_of_objects)
+    # get list of object image paths
+    sampled_object_paths, YOLO_CLASSES = get_object_paths(object_folder_path, num_of_objects)
 
     # get filename of background
     bg_name = bg_path.split('\\')[-1]
@@ -432,34 +583,33 @@ def augmented_bg_with_objects(bg_path, num_of_objects, object_folder_path, YOLO_
     else:
         TAV_cam_view = None
     
-    # initialize smallest and largest object sizes and boundary coordinates
-    nearest_obj, furthest_obj, boundary_x, boundary_y = initialize_sizes_and_coordinates(TAV_cam_view)
-
     # background image dimension
     bg_img = Image.open(bg_path).convert('RGB')
     frame_width, frame_height = bg_img.size
 
+    # create non-overlapping coordinates list
+    non_overlap_size_lst = []
+
     for obj_path in sampled_object_paths:
-        # full path of object image
-        obj_path = object_folder_path + '\\' + obj_path
+        # object class name
+        obj_name = obj_path.split('\\')[-2]
 
-        # random coords
-        random_x_coord, random_y_coord = random_coords(frame_width, frame_height, boundary_x, boundary_y, TAV_cam_view)
-        random_coordinates = (random_x_coord, random_y_coord)
+        # initialize smallest and largest object sizes and boundary coordinates
+        nearest_obj, furthest_obj, boundary_x, boundary_y = initialize_sizes_and_coordinates(bg_path, TAV_cam_view)
 
-        # desired size of object given random coords
-        size = desired_size(random_x_coord, random_y_coord, nearest_obj, furthest_obj, frame_width, frame_height, TAV_cam_view)
+        # get random coordinates and desired size given those coordinates and updated coordinates list
+        random_coordinates, size, non_overlap_size_lst = get_random_coords_and_size(obj_path, non_overlap_size_lst, frame_width, frame_height, nearest_obj, furthest_obj, boundary_x, boundary_y, TAV_cam_view)
 
         # obtain image with mask
-        img_mask, yolo_info = img_with_mask(obj_path, size, bg_img, random_x_coord, random_y_coord, frame_width, frame_height, TAV_cam_view)
+        img_mask, yolo_info = img_with_mask(obj_path, size, bg_img, random_coordinates, frame_width, frame_height, TAV_cam_view)
         
         # overlay object on background
         bg_img = overlay_img_on_bg(img_mask, bg_img, random_coordinates)
 
         # insert CLASSID into yolo_info list
-        yolo_info.insert(0, CLASSID)
+        yolo_info.insert(0, YOLO_CLASSES.index(obj_name))
         YOLO_lst.append(yolo_info)
-    
+
     #convert to RGB format
     # try:
     #     bg_img = format_rgb(bg_img)
@@ -471,7 +621,7 @@ def augmented_bg_with_objects(bg_path, num_of_objects, object_folder_path, YOLO_
 
 
 # generate augmented backgrounds with objects
-def generate_augmented_backgrounds(num_of_augmented_frames, num_of_objects, obj_folder_path, bg_images_path, save_path, YOLO_txt = False, YOLO_CLASSID = None):
+def generate_augmented_backgrounds(num_of_augmented_frames, num_of_objects, obj_folder_path, bg_images_path, save_path, YOLO_txt = False):
     # num_of_augmented_frames: specify number of frames to be augmented
     # num_of_objects: specified number of objects if <10, else, randomly generate number of objects to put inside each bg image
     # obj_folder_path: path for folder of objects
@@ -479,12 +629,7 @@ def generate_augmented_backgrounds(num_of_augmented_frames, num_of_objects, obj_
     # save_path: path to save augmented images
     # YOLO_txt: True if generating yolo text files, else False
     # YOLO_CLASSID: specify CLASSID
-    
-    # randomize the number of objects
-    if num_of_objects >= 10:
-        num_of_objects = random.randint(10,15)
-    elif num_of_objects >=5 and num_of_objects <10:
-        num_of_objects = random.randint(5, 9)
+   
 
 
     for i in tqdm(range(num_of_augmented_frames)):
@@ -502,7 +647,7 @@ def generate_augmented_backgrounds(num_of_augmented_frames, num_of_objects, obj_
         #NOTE: there are occasions where random coordinates generated contain a 0, thus we avoid an error by implementing Try/Except
         try: 
             # get augmented background and YOLO list
-            bg_img, YOLO_lst = augmented_bg_with_objects(bg_path, num_of_objects, obj_folder_path, YOLO_CLASSID)
+            bg_img, YOLO_lst = augmented_bg_with_objects(bg_path, num_of_objects, obj_folder_path)
 
             # save augmented background (and YOLO txt file if activated)
             bg_img.save(save_bg_name + '.jpg')
@@ -511,6 +656,7 @@ def generate_augmented_backgrounds(num_of_augmented_frames, num_of_objects, obj_
             print(e)
             pass
             
+
 
 
 
