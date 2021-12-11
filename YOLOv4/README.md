@@ -11,11 +11,11 @@
   
   ### Original Images
   
-  <img src = "YOLOv4/images/pedestrian1_before.jpg" height = "300"> <img src = "YOLOv4/images/pedestrian2_before.jpg" height = "300">
+  <img src = "images/pedestrian1_before.jpg" height = "300"> <img src = "images/pedestrian2_before.jpg" height = "300">
   
   ### Augmented Images
   
-  <img src = "images/pedestrian1_augmented.jpg" height = "300"> <img src = "YOLOv4/images/pedestrian2_augmented.jpg" height = "300">
+  <img src = "images/pedestrian1_augmented.jpg" height = "300"> <img src = "images/pedestrian2_augmented.jpg" height = "300">
   
   
   After augmenting enough pedestrians, I collected existing CCTV frames of backgrounds and placed the pedestrians in the frame to mimick a fallen person.
