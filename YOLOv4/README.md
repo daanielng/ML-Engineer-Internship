@@ -15,25 +15,25 @@
   
   ### Augmented Images
   
-  <img src = "YOLOv4/images/pedestrian1_augmented.jpg" height = "300"> <img src = "YOLOv4/images/pedestrian2_augmented.jpg" height = "300">
+  <img src = "images/pedestrian1_augmented.jpg" height = "300"> <img src = "YOLOv4/images/pedestrian2_augmented.jpg" height = "300">
   
   
   After augmenting enough pedestrians, I collected existing CCTV frames of backgrounds and placed the pedestrians in the frame to mimick a fallen person.
   
   ### Background frame with no pedestrians
   
-  <img src = "YOLOv4/images/background.jpg" height = "300">
+  <img src = "images/background.jpg" height = "300">
   
   ### Background frame with augmented pedestrian
   
-  <img src = "YOLOv4/images/cam1-afternoon_1010.jpg" height = "300">
+  <img src = "images/cam1-afternoon_1010.jpg" height = "300">
   
   # Results
   After training the detector with the added augmented frames, it successfully detected fallen pedestrians, including random stock videos online
   
   ## Before training
-  <img src = "YOLOv4/images/video_snippets/before_improvement1.gif">
+  <img src = "images/video_snippets/before_improvement1.gif">
   
   ## After training
-  <img src = "YOLOv4/images/video_snippets/improvement1.gif">
-  <img src = "YOLOv4/images/video_snippets/stock_vid_improvement.gif">
+  <img src = "images/video_snippets/improvement1.gif">
+  <img src = "images/video_snippets/stock_vid_improvement.gif">
