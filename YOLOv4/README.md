@@ -31,9 +31,9 @@
   # Results
   After training the detector with the added augmented frames, it successfully detected fallen pedestrians, including random stock videos online
   
-  ## Before training
+  ### Before training
   <img src = "images/video_snippets/before_improvement1.gif">
   
-  ## After training
+  ### After training
   <img src = "images/video_snippets/improvement1.gif">
   <img src = "images/video_snippets/stock_vid_improvement.gif">
