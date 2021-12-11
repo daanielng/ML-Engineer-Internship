@@ -9,4 +9,4 @@
 
  2. Solved an overfitting issue regarding our proprietary YOLOv4 detector that could only detect standing persons and not fallen persons by implementing data augmentation using persons from the same distribution, resulting in fall detection test to pass during inference
  
- 3. Developed a new Face Attribute Recognition by combining multiple CNN architectures to create a multi-ouput Classifier, successfully predicting attributes such as Maskwear, Hair Colour, Hair Length, Facial Hair, Age, Gender.
+ 3. Developed a new Face Attribute Recognition by combining multiple CNN architectures to create a multi-output classifier, successfully predicting attributes such as Maskwear, Hair Colour, Hair Length, Facial Hair, Age, Gender.
