@@ -29,7 +29,7 @@
   <img src = "images/cam1-afternoon_1010.jpg" height = "300">
   
   # Results
-  After training the detector with the added augmented frames, it successfully detected fallen pedestrians, including random online stock videos.
+  After training the detector with the added augmented frames, it successfully detected fallen pedestrians, including random online stock videos of people falling.
   
   ### Before training
   <img src = "images/video_snippets/before_improvement1.gif">
