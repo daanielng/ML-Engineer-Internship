@@ -11,7 +11,7 @@
   <img src = "PMD_Classifier/images/cyclist.png" width = "400">
  </p>
 
- 2. Solved an overfitting issue regarding our proprietary [YOLOv4 detector](YOLOv4) that could only detect standing persons and not fallen persons by implementing data augmentation using persons from the same distribution, resulting in fall detection test to pass during inference
+ 2. Solved an overfitting issue regarding our proprietary [YOLOv4 detector](YOLOv4) that could only detect standing persons and not fallen persons by implementing data augmentation using persons from the same distribution, resulting in fall detection test to pass during inference.
  
  <p align = "center">
   <img src = "YOLOv4/images/video_snippets/improvement2.gif" width = "400">
