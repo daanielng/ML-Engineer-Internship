@@ -2,7 +2,7 @@
  Written preprocessing, data augmentation and training scripts during my internship that were heavily responsible for the implementation of models in the business-level deployment.
  
 # My Internship Role
- My main responsibility is to develop and maintain ML models to perform specific tasks in challenging uncontrolled environments in the field of security, safety and operations.
+ My main responsibility is to develop and maintain ML models to perform specific tasks in challenging uncontrolled environments in the field of security, safety and operations. Other responsibilities include feature engineering tasks for modelling.
  
 # Achievements
  1. Developed a [Personal Mobility Device (PMD) classifier](PMD_Classifier) that was implemented in several CCTVs in Tel-Aviv City, Israel, achieving a 98% accuracy during our latest inference.
