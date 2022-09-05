@@ -1,4 +1,4 @@
-# Machine Learning Developer Internship
+# Machine Learning Engineer Internship
  Written preprocessing, data augmentation and training scripts during my internship that were heavily responsible for the implementation of models in the business-level deployment.
  
 # My Internship Role
